@@ -1,0 +1,34 @@
+
+# syntax=docker/dockerfile:1
+
+# preparation for building image:
+
+# $ eval $(ssh-agent)
+# $ ssh-add ~/.ssh/name_of_key
+# $ # (may need to input passphrase)
+
+# ref: https://docs.docker.com/develop/develop-images/build_enhancements/#using-ssh-to-access-private-data-in-builds
+# $ DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile -t llm/demo:lab-develop .
+
+FROM ubuntu:22.04
+
+RUN sed -i 's/archive.ubuntu.com/tw.archive.ubuntu.com/g' /etc/apt/sources.list
+RUN apt update && \
+    apt upgrade -y && \
+    apt install -y python3-pip
+
+RUN ln -s /usr/bin/python3 /usr/bin/python
+RUN adduser --disabled-password demo
+
+COPY ./apps /apps
+COPY ./requirements/base /apps/requirements
+
+RUN pip3 install pip -U && \
+    pip install -r /apps/requirements --no-cache-dir
+
+RUN chown -R demo:demo /apps
+
+USER demo
+WORKDIR /apps
+
+CMD ["apps", "run", "start.py"]
