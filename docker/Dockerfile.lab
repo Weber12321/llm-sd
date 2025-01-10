@@ -20,15 +20,15 @@ RUN apt update && \
 RUN ln -s /usr/bin/python3 /usr/bin/python
 RUN adduser --disabled-password demo
 
-COPY ./apps /apps
-COPY ./requirements/base /apps/requirements
+COPY ./lab /lab
+COPY ./requirements/base /lab/requirements
 
 RUN pip3 install pip -U && \
-    pip install -r /apps/requirements --no-cache-dir
+    pip install -r /lab/requirements --no-cache-dir
 
-RUN chown -R demo:demo /apps
+RUN chown -R demo:demo /lab
 
 USER demo
-WORKDIR /apps
+WORKDIR /lab
 
-CMD ["apps", "run", "start.py"]
+CMD ["lab", "run", "start.py"]
