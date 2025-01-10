@@ -8,7 +8,7 @@
 # $ # (may need to input passphrase)
 
 # ref: https://docs.docker.com/develop/develop-images/build_enhancements/#using-ssh-to-access-private-data-in-builds
-# $ DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile -t llm/demo:lab-develop .
+# $ DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile.lab -t llm/demo:lab-develop .
 
 FROM ubuntu:22.04
 
