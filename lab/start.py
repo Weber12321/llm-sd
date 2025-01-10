@@ -23,7 +23,7 @@ pages = {
     ],
     "Chat": [
         st.Page(
-            "page/chat/conversation.py"
+            "page/chat/conversation.py",
             title="simple chat"
         )
     ]

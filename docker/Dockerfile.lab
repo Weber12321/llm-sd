@@ -21,7 +21,7 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 RUN adduser --disabled-password demo
 
 COPY ./lab /lab
-COPY ./requirements/base /lab/requirements
+COPY ./requirements/streamlit /lab/requirements
 
 RUN pip3 install pip -U && \
     pip install -r /lab/requirements --no-cache-dir

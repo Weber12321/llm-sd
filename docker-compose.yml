@@ -7,7 +7,7 @@ services:
     runtime: nvidia
     environment: 
       - NVIDIA_VISIBLE_DEVICES=${GPU_INDEX}
-    image: systalk/demo:vllm-server
+    image: llm/demo:vllm-server
     volumes:
       - /opt/ai_models/llm/:/storage
     command: > 
@@ -26,12 +26,12 @@ services:
       - vllm-demo
 
   vllm-lab:
-    image: systalk/demo:vllm-demo
-    command: python -m streamlit run start.py --server.port ${PORT}
+    image: llm/demo:lab-develop
+    command: python -m streamlit run start.py --server.port ${LAB_PORT}
     volumes:
       - ./lab:/lab
     ports:
-      - ${PORT}:${PORT}
+      - ${LAB_PORT}:${LAB_PORT}
     restart: on-failure
     env_file:
       - docker-vars.env

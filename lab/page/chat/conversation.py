@@ -49,7 +49,7 @@ if not st.session_state.messages:
         "role": "system", "content": system_prompt + "\n\n" + greeting})
 
 if "openai_model" not in st.session_state:
-    st.session_state["openai_model"] = "Breeze-7B"
+    st.session_state["openai_model"] = os.getenv("MODEL_NAME", "")
 
 # Display chat messages from history on app rerun
 for message in st.session_state.messages:
