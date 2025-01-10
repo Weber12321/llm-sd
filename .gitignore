@@ -226,6 +226,3 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-
-# compose 
-docker-compose.yml

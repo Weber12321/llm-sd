@@ -1,0 +1,43 @@
+
+version: '3.5'
+
+services:
+
+  vllm-server:
+    runtime: nvidia
+    environment: 
+      - NVIDIA_VISIBLE_DEVICES=${GPU_INDEX}
+    image: llm/demo:vllm-server
+    volumes:
+      - /opt/ai_models/llm/:/storage
+    command: > 
+      bash -c "vllm serve "${MODEL_PATH}" 
+      --served-model-name ${MODEL_NAME} 
+      --trust-remote-code 
+      --host ${HOST} 
+      --port ${PORT} 
+      --max-model-len ${MAX_MODEL_LEN} 
+      --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION} 
+      --api-key ${VLLM_API_KEY}"
+    ports:
+      - ${PORT}:${PORT} 
+    restart: on-failure
+    networks:
+      - vllm-demo
+
+  vllm-lab:
+    image: llm/demo:lab-develop
+    command: python -m streamlit run start.py --server.port ${LAB_PORT}
+    volumes:
+      - ./lab:/lab
+    ports:
+      - ${LAB_PORT}:${LAB_PORT}
+    restart: on-failure
+    env_file:
+      - docker-vars.env
+    networks:
+      - vllm-demo
+
+networks:
+  vllm-demo:
+    external: true
