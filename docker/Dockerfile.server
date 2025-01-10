@@ -7,7 +7,7 @@
 # $ # (may need to input passphrase)
 
 # ref: https://docs.docker.com/develop/develop-images/build_enhancements/#using-ssh-to-access-private-data-in-builds
-# $ DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile.vllm -t llm/demo:vllm-server .
+# $ DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile.server -t llm/demo:vllm-server .
 
 FROM nvidia/cuda:11.7.1-cudnn8-runtime-ubuntu22.04
 
