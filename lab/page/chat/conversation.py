@@ -7,7 +7,7 @@ import streamlit as st
 st.title("Simple chat")
 
 
-base_url = os.getenv("VLLM_HOST", "http://localhost:8000/v1")
+base_url = os.getenv("VLLM_HOST", "")
 api_key = os.getenv("VLLM_API_KEY", "")
 
 logging.info(base_url)
