@@ -1,5 +1,5 @@
 import os
-
+from .placeholder import Placeholder
 
 # 呼叫 LLM 模型推論 API 
 inference_action_config = {
@@ -8,6 +8,7 @@ inference_action_config = {
     "llm_api_path": os.getenv(
         "RAG_API", "http://localhost:8001/api/v0/llm/rag"
     ),
+    "response_key": Placeholder.GENERATE_RESPONSE,
 }
 
 # 模型參數說明模板
@@ -33,14 +34,16 @@ generate_param_layout_config = {
         "min_value": 0.01,
         "max_value": 1.0,
         "step": 0.01,
-        "format": "%.2f"
+        "format": "%.2f",
+        "response_key": Placeholder.GENERATE_TOP_P
     },
     "top_k_config": {
         "label": "Top-k",
         "value": 50,
         "min_value": 1,
         "max_value": 100,
-        "step": 1
+        "step": 1,
+        "response_key": Placeholder.GENERATE_TOP_K
     },
     "temperature_config": {
         "label": "Temperature",
@@ -48,14 +51,16 @@ generate_param_layout_config = {
         "min_value": 0.01,
         "max_value": 1.0,
         "step": 0.01,
-        "format": "%.2f"
+        "format": "%.2f",
+        "response_key": Placeholder.GENERATE_TEMPERATURE
     },
     "max_token_config": {
         "label": "Max token",
         "value": 1000,
         "min_value": 1,
         "max_value": 8000,
-        "step": 1
+        "step": 1,
+        "response_key": Placeholder.GENERATE_MAX_TOKEN
     },
 }
 
@@ -64,6 +69,7 @@ query_template_config = {
     "label": "輸入要潤飾的問題",
     "value": "請問我要如何請特休？",
     "height": 300,
+    "response_key": Placeholder.QUERY
 }
 
 # 回答模板
@@ -91,19 +97,22 @@ answer_template_config = {
         總結
         胡德民的演講強調了AI技術導入的策略與挑戰，強調企業應聚焦痛點解決、具備風險意識、從小規模驗證技術的可行性，並認識到創新應用對商業模式轉型的重要性。繁體中文語言模型的法律應用更突顯了技術在特定領域的潛在價值。
     """,
-    "height": 300
+    "height": 300,
+    "response_key": Placeholder.HISTORY_ANSWER
 }
 
 # 指示模板
 instructions_template_config = {
     "label": "請輸入要潤飾的指示",
     "value": "請綜合問題和潤飾回覆的答案做統整，並生成出三個延伸問題。",
-    "height": 300
+    "height": 300,
+    "response_key": Placeholder.INSTRUCTIONS
 }
 
 # 生成結果模板
 response_template_config = {
     "label": "回應",
+    "value": Placeholder.GENERATE_RESPONSE,
     "height": 300
 }
 

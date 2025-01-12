@@ -4,7 +4,7 @@ from components.templates.interfaces import Template
 
 
 class TextInputTemplate(Template):
-    def __call__(self, label, placeholder, **kwargs) -> str:
+    def element(self, label, placeholder, **kwargs) -> str:
         """
         Construct a text input with the given label and value.
         """
@@ -13,7 +13,7 @@ class TextInputTemplate(Template):
 
 class TextPromptTemplate(Template):
 
-    def __call__(self, label, value, height=300, **kwargs) -> str:
+    def element(self, label, value, height=300, **kwargs) -> str:
         """
         Construct a text area with the given label and value.
         """
@@ -22,7 +22,7 @@ class TextPromptTemplate(Template):
 
 class NumberParameterTemplate(Template):
 
-    def __call__(
+    def element(
         self, 
         label, 
         value, 
@@ -46,14 +46,14 @@ class NumberParameterTemplate(Template):
 
 class ResponseTemplate(Template):
 
-    def __call__(self, label, key, height, **kwargs) -> None:
+    def element(self, label, key, height, **kwargs) -> None:
         """
         Construct a text area with the given label and key for response.
         """
         text_area_container = st.empty()
         text_area_container.text_area(
             label=label,
-            key=key,
+            # key=key,
             height=height,
             **kwargs
         )
@@ -61,7 +61,7 @@ class ResponseTemplate(Template):
 
 class SelectBarTemplate(Template):
 
-    def __call__(
+    def element(
         self, 
         label: str, 
         options: List[str], 
