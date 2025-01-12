@@ -1,4 +1,5 @@
 from typing import List
+
 import streamlit as st
 from components.templates.interfaces import Template
 
@@ -23,13 +24,7 @@ class TextPromptTemplate(Template):
 class NumberParameterTemplate(Template):
 
     def element(
-        self, 
-        label, 
-        value, 
-        min_value=0,
-        max_value=100,
-        step=1,
-        **kwargs
+        self, label, value, min_value=0, max_value=100, step=1, **kwargs
     ) -> int | float:
         """
         Construct a number input slider with the given label and value.
@@ -62,15 +57,18 @@ class ResponseTemplate(Template):
 class SelectBarTemplate(Template):
 
     def element(
-        self, 
-        label: str, 
-        options: List[str], 
-        value: List[str], 
-        **kwargs
+        self, label: str, options: List[str], value: List[str], **kwargs
     ) -> List[str]:
         """
         Construct a select bar with the given label and options.
         """
-        return st.multiselect(
-            label, options, value, **kwargs
-        )
+        return st.multiselect(label, options, value, **kwargs)
+
+
+class ButtonTemplate(Template):
+
+    def element(self, label, button_type, **kwargs) -> None:
+        """
+        Construct a submit button with the given label.
+        """
+        return st.button(label, button_type=button_type, **kwargs)
