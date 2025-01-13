@@ -36,8 +36,12 @@ services:
     env_file:
       - docker-vars.env
     networks:
+      - llm
       - vllm-demo
 
 networks:
+  llm:
+    external: true
   vllm-demo:
     external: true
+  

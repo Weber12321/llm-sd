@@ -1,4 +1,5 @@
 import os
+import logging
 from openai import OpenAI
 
 import streamlit as st
@@ -6,10 +7,18 @@ import streamlit as st
 st.title("Simple chat")
 
 
+base_url = os.getenv("VLLM_HOST", "")
+api_key = os.getenv("VLLM_API_KEY", "")
+
+logging.info(base_url)
+logging.info(api_key)
+
+
 client = OpenAI(
-    base_url=os.getenv("VLLM_HOST", "http://localhost:8000/v1"),
-    api_key=os.getenv("VLLM_API_KEY", ""),
+    base_url=base_url,
+    api_key=api_key,
 )
+
 
 # Model param
 with st.sidebar:
