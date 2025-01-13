@@ -25,6 +25,10 @@ pages = {
         st.Page(
             "page/chat/conversation.py",
             title="simple chat"
+        ),
+        st.Page(
+            "page/chat/rag_conversation.py",
+            title="simple RAG"
         )
     ]
 }

@@ -2,7 +2,6 @@ import os
 from openai import OpenAI
 
 
-
 client = OpenAI(
     base_url="http://vllm-server:9999/v1",
     api_key="12345",

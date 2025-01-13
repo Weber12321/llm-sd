@@ -29,3 +29,6 @@ class EmbeddingClient(Embeddings):
         except requests.exceptions.RequestException as exc:
             logging.error(str(exc))
             raise exc
+        
+    def embed_query(self, query: str) -> List[float]:
+        return self.embed_documents([query])[0]
