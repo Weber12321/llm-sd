@@ -1,5 +1,7 @@
+import operator
 import os
-from typing import List, TypedDict
+from openai import BadRequestError
+from typing import Annotated, List, TypedDict
 
 import streamlit as st
 from langchain_community.vectorstores import OpenSearchVectorSearch
@@ -7,7 +9,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_openai import ChatOpenAI
-from langgraph.graph import END, StateGraph, START
+from langgraph.graph import END, START, StateGraph
 from utils.client.embedding import EmbeddingClient
 
 st.title("Corrective RAG")
@@ -27,7 +29,6 @@ model_name = os.getenv("MODEL_NAME", "")
 # ========================================
 class GradeDocuments(BaseModel):
     """Binary score for relevance check on retrieved documents."""
-
     binary_score: str = Field(
         description="Documents are relevant to the question, 'yes' or 'no'"
     )
@@ -116,12 +117,18 @@ class GraphState(TypedDict):
         generation: LLM generation
         web_search: whether to add search
         documents: list of documents
+        rewrite_question: rephrased question
+        rewrite_generation: LLM generation
+        rewrite_documents: list of documents
     """
 
     question: str
     generation: str
     transformed_question: str
-    documents: List[str]
+    documents: list[str]
+    rewrite_question: str
+    rewrite_generation: str
+    rewrite_documents: list[str]
 
 
 # ========================================
@@ -146,6 +153,23 @@ def retrieve(state):
     return {"documents": documents, "question": question}
 
 
+def extra_retrieve(state):
+    """
+    Retrieve documents
+
+    Args:
+        state (dict): The current graph state
+
+    Returns:
+        state (dict): New key added to state, documents, that contains retrieved documents
+    """
+    question = state["rewrite_question"]
+
+    # Retrieval
+    documents = retriever.get_relevant_documents(question)
+    return {"rewrite_documents": documents, "rewrite_question": question}
+
+
 def generate(state):
     """
     Generate answer
@@ -166,6 +190,28 @@ def generate(state):
     }
 
 
+def extra_generate(state):
+    """
+    Generate answer
+
+    Args:
+        state (dict): The current graph state
+
+    Returns:
+        state (dict): New key added to state, generation, that contains LLM generation
+    """
+    question = state["rewrite_question"]
+    documents = state["rewrite_documents"]
+
+    # RAG generation
+    generation = rag_chain.invoke({"context": documents, "question": question})
+    return {
+        "rewrite_documents": documents, 
+        "rewrite_question": question, 
+        "rewrite_generation": generation
+    }
+
+
 def grade_documents(state):
     """
     Determines whether the retrieved documents are relevant to the question.
@@ -177,22 +223,21 @@ def grade_documents(state):
         state (dict): Updates documents key with only filtered relevant documents
     """
 
-    print("---CHECK DOCUMENT RELEVANCE TO QUESTION---")
     question = state["question"]
     documents = state["documents"]
 
     # Score each doc
     filtered_docs = []
-    transformed_question = "No"
+    transformed_question = "Yes"
     for d in documents:
         score = retrieval_grader.invoke(
             {"question": question, "document": d.page_content}
         )
         grade = score.binary_score
         if grade == "yes":
+            transformed_question = "No"
             filtered_docs.append(d)
         else:
-            transformed_question = "Yes"
             continue
     return {
         "documents": filtered_docs, 
@@ -212,13 +257,12 @@ def transform_query(state):
         state (dict): Updates question key with a re-phrased question
     """
 
-    print("---TRANSFORM QUERY---")
     question = state["question"]
     documents = state["documents"]
 
     # Re-write question
     better_question = question_rewriter.invoke({"question": question})
-    return {"documents": documents, "question": better_question}
+    return {"documents": documents, "rewrite_question": better_question}
 
 
 # ========================================
@@ -259,6 +303,8 @@ workflow.add_node("retrieve", retrieve)  # retrieve
 workflow.add_node("grade_documents", grade_documents)  # grade documents
 workflow.add_node("generate", generate)  # generatae
 workflow.add_node("transform_query", transform_query)  # transform_query
+workflow.add_node("extra_retrieve", extra_retrieve)
+workflow.add_node("extra_generate", extra_generate)
 
 # Buikd Graph
 workflow.add_edge(START, "retrieve")
@@ -271,9 +317,9 @@ workflow.add_conditional_edges(
         "generate": "generate",
     },
 )
-workflow.add_edge("transform_query", "retrieve")
-workflow.add_edge("retrieve", "generate")
-workflow.add_edge("generate", END)
+workflow.add_edge("transform_query", "extra_retrieve")
+workflow.add_edge("extra_retrieve", "extra_generate")
+workflow.add_edge("extra_generate", END)
 
 # Compile
 app = workflow.compile()
@@ -291,11 +337,15 @@ if prompt := st.chat_input("What is up?"):
 
     # Display assistant response in chat message container
     with st.chat_message("assistant"):
-
-        st.write_stream(
-            workflow.stream({"question": prompt}, stream_mode="updates")
-        )
-        # for message, metadata in graph.stream(
-        #     {"question": prompt}, stream_mode="messages"
-        # ):
-        #     response = st.write(message.content)
+        
+        # try:
+        #     st.write_stream(
+        #         app.stream({"question": prompt}, stream_mode="updates")
+        #     )
+        # except BadRequestError:
+        #     st.error("Oops, it seems like the question is too complex or too long for me to answer. Please refresh the page abd try another question.")
+        #     st.stop()
+        for message, metadata in app.stream(
+            {"question": prompt}, stream_mode="messages"
+        ):
+            response = st.write(message.content)
