@@ -402,7 +402,8 @@ app = workflow.compile()
 #                   Streamlit
 # ========================================
 
-
+# TODO: use message state here to obtain the history of the conversation
+# TODO: how do we handle the button inside the chat message container?
 if prompt := st.chat_input("What is up?"):
     # Add user message to chat history
     # Display user message in chat message container
