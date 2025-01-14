@@ -25,6 +25,82 @@ model_name = os.getenv("MODEL_NAME", "")
 
 
 # ========================================
+#                   Parameters
+# ========================================
+if "enable_params_adjustment" not in st.session_state:
+    st.session_state.enable_params_adjustment = False
+
+
+@st.dialog("Enable for adjusting prompt and generate parameters")
+def enable():
+    st.warning("Are you sure to modify the parameters?")
+    if st.button("Yes"):
+        st.session_state.enable_params_adjustment = True
+        st.rerun()
+
+
+# ========================================
+#                   System prompts
+# ========================================
+grader_default = """You are a grader assessing relevance of a retrieved document to a user question.
+If the document contains keyword(s) or semantic meaning related to the question, grade it as relevant.
+Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question."""
+
+generate_default = """You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
+Question: {question} 
+Context: {context} 
+Answer:"""
+
+query_rewrite_default = """You a question re-writer that converts an input question to a better version that is optimized for retrival. Look at the input and try to reason about the underlying semantic intent / meaning."""
+
+with st.sidebar:
+    st.markdown("#### Prompts and Parameters")
+    st.button(
+        label="Enable adjustment",
+        type="primary",
+        on_click=enable,
+    )
+    disable = not st.session_state.enable_params_adjustment
+    grader_system_prompt = st.text_area(
+        label="Grader Prompt",
+        value=grader_default,
+        disabled=disable,
+    )
+    generate_system_prompt = st.text_area(
+        label="Generate Prompt",
+        value=generate_default,
+        disabled=disable,
+    )
+    query_rewrite_system_prompt = st.text_area(
+        label="Query Rewrite Prompt",
+        value=query_rewrite_default,
+        disabled=disable,
+    )
+    top_p = float(st.slider(
+        label="Top-p",
+        value=0.50,
+        min_value=0.01,
+        max_value=1.0,
+        step=0.01,
+        format="%.2f"  
+    ))
+    temperature = float(st.slider(
+        label="Temperature",
+        value=0.50,
+        min_value=0.01,
+        max_value=1.0,
+        step=0.01,
+        format="%.2f"
+    ))
+    max_token = int(st.slider(
+        label="Max token",
+        value=2000,
+        min_value=10,
+        max_value=8000
+    ))
+
+
+# ========================================
 #                   Data Model
 # ========================================
 class GradeDocuments(BaseModel):
@@ -38,7 +114,12 @@ class GradeDocuments(BaseModel):
 #                   Clients
 # ========================================
 llm = ChatOpenAI(
-    openai_api_base=base_url, openai_api_key=api_key, model_name=model_name
+    openai_api_base=base_url, 
+    openai_api_key=api_key, 
+    model_name=model_name,
+    temperature=temperature,
+    top_p=top_p,
+    max_tokens=max_token
 )
 structured_llm_grader = llm.with_structured_output(GradeDocuments)
 embedding_client = EmbeddingClient(
@@ -53,55 +134,40 @@ vector_store = OpenSearchVectorSearch(
 
 retriever = vector_store.as_retriever()
 
+
 # ========================================
 #                   Grader
 # ========================================
-# Prompt
-system = """You are a grader assessing relevance of a retrieved document to a user question. \n 
-    If the document contains keyword(s) or semantic meaning related to the question, grade it as relevant. \n
-    Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question."""
 grade_prompt = ChatPromptTemplate.from_messages(
     [
-        ("system", system),
-        ("human", "Retrieved document: \n\n {document} \n\n User question: {question}"),
+        ("system", grader_system_prompt),
+        (
+            "human", 
+            "Retrieved document: \n\n {document} \n\n User question: {question}"
+        ),
     ]
 )
-
 retrieval_grader = grade_prompt | structured_llm_grader
 
 # ========================================
 #                   Generate
 # ========================================
-
-
-# Prompt
-template = """You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
-Question: {question} 
-Context: {context} 
-Answer:"""
-prompt = ChatPromptTemplate.from_template(template)
-
-
-# Chain
+prompt = ChatPromptTemplate.from_template(generate_system_prompt)
 rag_chain = prompt | llm | StrOutputParser()
 
 
 # ========================================
 #                 Query Re-write
 # ========================================
-# Prompt
-system = """You a question re-writer that converts an input question to a better version that is optimized \n 
-     for retrival. Look at the input and try to reason about the underlying semantic intent / meaning."""
 re_write_prompt = ChatPromptTemplate.from_messages(
     [
-        ("system", system),
+        ("system", query_rewrite_system_prompt),
         (
             "human",
             "Here is the initial question: \n\n {question} \n Formulate an improved question.",
         ),
     ]
 )
-
 question_rewriter = re_write_prompt | llm | StrOutputParser()
 
 
