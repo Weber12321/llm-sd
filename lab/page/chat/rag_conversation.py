@@ -79,7 +79,8 @@ if prompt := st.chat_input("What is up?"):
     with st.chat_message("assistant"):
 
         st.write_stream(
-            graph.stream({"question": prompt}, stream_mode="updates")
+            i.content
+            for i, _ in graph.stream({"question": prompt}, stream_mode="messages")
         )
         # for message, metadata in graph.stream(
         #     {"question": prompt}, stream_mode="messages"

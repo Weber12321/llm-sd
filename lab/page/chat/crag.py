@@ -1,8 +1,7 @@
-import operator
+from email import message
 import os
+from typing import TypedDict
 from openai import BadRequestError
-from typing import Annotated, List, TypedDict
-
 import streamlit as st
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_core.output_parsers import StrOutputParser
@@ -29,6 +28,12 @@ model_name = os.getenv("MODEL_NAME", "")
 # ========================================
 if "enable_params_adjustment" not in st.session_state:
     st.session_state.enable_params_adjustment = False
+
+if "log" not in st.session_state:
+    st.session_state.log = None
+
+if "history" not in st.session_state:
+    st.session_state.history = []
 
 
 @st.dialog("Enable for adjusting prompt and generate parameters")
@@ -64,16 +69,19 @@ with st.sidebar:
     grader_system_prompt = st.text_area(
         label="Grader Prompt",
         value=grader_default,
+        height=300,
         disabled=disable,
     )
     generate_system_prompt = st.text_area(
         label="Generate Prompt",
         value=generate_default,
+        height=300,
         disabled=disable,
     )
     query_rewrite_system_prompt = st.text_area(
         label="Query Rewrite Prompt",
         value=query_rewrite_default,
+        height=300,
         disabled=disable,
     )
     top_p = float(st.slider(
@@ -94,7 +102,7 @@ with st.sidebar:
     ))
     max_token = int(st.slider(
         label="Max token",
-        value=2000,
+        value=8000,
         min_value=10,
         max_value=8000
     ))
@@ -400,18 +408,22 @@ if prompt := st.chat_input("What is up?"):
     # Display user message in chat message container
     with st.chat_message("user"):
         st.markdown(prompt)
-
+        st.session_state.history.append({"role": "user", "message": prompt})
     # Display assistant response in chat message container
     with st.chat_message("assistant"):
-        
-        # try:
-        #     st.write_stream(
-        #         app.stream({"question": prompt}, stream_mode="updates")
-        #     )
-        # except BadRequestError:
-        #     st.error("Oops, it seems like the question is too complex or too long for me to answer. Please refresh the page abd try another question.")
-        #     st.stop()
-        for message, metadata in app.stream(
-            {"question": prompt}, stream_mode="messages"
-        ):
-            response = st.write(message.content)
+        inputs = {"question": prompt}
+        try:
+            response = [output for output in app.stream(inputs)]
+            st.write(response[-1]["generate"]["generation"])
+            st.session_state.history.append({"role": "assistant", "message": response[-1]["generate"]["generation"]})
+            st.session_state.log = response
+        except BadRequestError:
+            st.error("Oops, it seems like the question is too complex or too long for me to answer. Please refresh the page abd try another question.")
+            st.stop()
+
+if st.session_state.log:
+    if st.button("Show more"):
+        for item in st.session_state.history:
+            with st.chat_message(item["role"]):
+                st.write(item["message"])
+        st.write(st.session_state.log)        
