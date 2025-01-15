@@ -8,8 +8,9 @@ from utils.session_state_registry import Registry
 class Template(ABC):
 
     def __call__(self, *args, response_key=None, **kwargs):
-        key = create_context_key()
-        kwargs["key"] = key
+        if "key" not in kwargs:
+            key = create_context_key()
+            kwargs["key"] = key
         if response_key:
             Registry.register(response_key, key)
         args, kwargs = Placeholder.update_param_placeholders(*args, **kwargs)

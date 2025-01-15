@@ -12,11 +12,13 @@ class QueryAction(Logic):
     def resonpse_parser(self, response):
         return response.json().get("results", [])
 
-    def _function(self, query_api_path, request_data, timeout):
+    def function(self, query_api_path, request_data, timeout):
         """
         Construct a number input slider with the given label and value.
         """
-        response = requests.post(url=query_api_path, json=request_data, timeout=timeout)
+        response = requests.post(
+            url=query_api_path, json=request_data, timeout=timeout
+        )
         if response.status_code != 200:
             response.raise_for_status()
 
@@ -58,7 +60,7 @@ class BuildPromptAction(Logic):
 
         return prompt_items
 
-    def _function(
+    def function(
         self,
         build_prompt_api: str,
         ordered_prompt_list: List[PromptItem],
@@ -70,7 +72,9 @@ class BuildPromptAction(Logic):
                 "if if_parse_search_output is True"
             )
 
-        prompt_with_placeholder = self._prompt_with_placeholder(ordered_prompt_list)
+        prompt_with_placeholder = self._prompt_with_placeholder(
+            ordered_prompt_list
+        )
 
         response = requests.post(
             url=build_prompt_api,
@@ -83,40 +87,39 @@ class BuildPromptAction(Logic):
 
         prompt = response.json().get("prompt", "")
 
-        return {"prompt": prompt, "prompt_with_placeholder": prompt_with_placeholder}
+        return {
+            "prompt": prompt,
+            "prompt_with_placeholder": prompt_with_placeholder,
+        }
 
 
 class InferenceCallBackAction(Logic):
-    
-    def resonpse_parser(self, response):
-        return response.json().get('results', '').get('text', '')
 
-    def _function(
-        self, 
-        llm_api_path,
-        prompt,
-        top_p,
-        top_k,
-        temperature,
-        max_token
+    def resonpse_parser(self, response):
+        return response.json().get("results", "").get("text", "")
+
+    def function(
+        self, llm_api_path, prompt, top_p, top_k, temperature, max_token
     ):
         """
         Construct a text area with the given label and key for response.
         """
-        # response = requests.post(
-        #     url=llm_api_path,
-        #     json={
-        #         "query": prompt,
-        #         "top_p": top_p,
-        #         "top_k": top_k,
-        #         "temperature": temperature,
-        #         "max_token": max_token
-        #     },
-        #     timeout=600
+        response = requests.post(
+            url=llm_api_path,
+            json={
+                "query": prompt,
+                "top_p": top_p,
+                "top_k": top_k,
+                "temperature": temperature,
+                "max_token": max_token
+            },
+            timeout=600
+        )
+
+        if response.status_code != 200:
+            response.raise_for_status()
+
+        return self.resonpse_parser(response)
+        # return str(
+        #     [llm_api_path, prompt, top_p, top_k, temperature, max_token]
         # )
-
-        # if response.status_code != 200:
-        #     response.raise_for_status()
-
-        # return self.resonpse_parser(response)
-        return str([llm_api_path, prompt, top_p, top_k, temperature, max_token])

@@ -67,8 +67,8 @@ class SelectBarTemplate(Template):
 
 class ButtonTemplate(Template):
 
-    def element(self, label, button_type, **kwargs) -> None:
+    def element(self, label, type, **kwargs) -> bool:
         """
         Construct a submit button with the given label.
         """
-        return st.button(label, button_type=button_type, **kwargs)
+        return st.button(label, type=type, **kwargs)

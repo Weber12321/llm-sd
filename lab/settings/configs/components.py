@@ -1,13 +1,16 @@
 import os
 from .placeholder import Placeholder
 
-# 呼叫 LLM 模型推論 API 
+# 呼叫 LLM 模型推論 API
 inference_action_config = {
-    "label": "生成回覆",
-    "button_type": "primary",
-    "llm_api_path": os.getenv(
-        "RAG_API", "http://localhost:8001/api/v0/llm/rag"
-    ),
+    # "label": "生成回覆",
+    # "button_type": "primary",
+    "llm_api_path": "http://localhost:8001/api/v0/llm/rag",
+    "prompt": Placeholder.QUERY,
+    "top_p": Placeholder.GENERATE_TOP_P,
+    "top_k": Placeholder.GENERATE_TOP_K,
+    "temperature": Placeholder.GENERATE_TEMPERATURE,
+    "max_token": Placeholder.GENERATE_MAX_TOKEN,
     "response_key": Placeholder.GENERATE_RESPONSE,
 }
 
@@ -160,4 +163,9 @@ save_prompt_action_config = {
 total_prompt_template_config = {
     "label": "完整 Prompt",
     "height": 300,
+}
+
+call_llm_button_template_config = {
+    "label": "生成回覆",
+    "type": "primary",
 }
