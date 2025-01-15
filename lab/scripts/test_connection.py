@@ -2,13 +2,20 @@ import os
 from openai import OpenAI
 
 
+url = os.getenv("VLLM_HOST")
+print("VLLM_HOST: %s", url)
+key = os.getenv("VLLM_API_KEY")
+print("VLLM_API_KEY: %s", key)
+model = os.getenv("MODEL_NAME")
+print("MODEL_NAME: %s", model)
+
 client = OpenAI(
-    base_url="http://vllm-server:9999/v1",
-    api_key="12345",
+    base_url=url,
+    api_key=key,
 )
 
 stream = client.chat.completions.create(
-    model="Breeze-7B",
+    model=model,
     messages=[
         {
             "role": "system",

@@ -1,17 +1,17 @@
-from email import message
 import os
 from typing import TypedDict
-from openai import BadRequestError
+
 import streamlit as st
+from langchain_community.tools import WikipediaQueryRun
+from langchain_community.utilities import WikipediaAPIWrapper
 from langchain_community.vectorstores import OpenSearchVectorSearch
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
+from openai import BadRequestError
 from utils.client.embedding import EmbeddingClient
-
-st.title("Corrective RAG")
 
 
 # setup environment variable
@@ -35,6 +35,9 @@ if "log" not in st.session_state:
 if "history" not in st.session_state:
     st.session_state.history = []
 
+if "plot" not in st.session_state:
+    st.session_state.plot = None
+
 
 @st.dialog("Enable for adjusting prompt and generate parameters")
 def enable():
@@ -43,6 +46,20 @@ def enable():
         st.session_state.enable_params_adjustment = True
         st.rerun()
 
+
+@st.dialog("Show graph")
+def show_graph():
+    if st.session_state.plot is None:
+        st.error("No graph to show")
+    st.image(st.session_state.plot)
+
+
+# ========================================
+#                   Title
+# ========================================
+
+st.title("Corrective RAG")
+st.button("Show graph", on_click=show_graph)
 
 # ========================================
 #                   System prompts
@@ -122,7 +139,7 @@ class GradeDocuments(BaseModel):
 #                   Clients
 # ========================================
 llm = ChatOpenAI(
-    openai_api_base=base_url, 
+    openai_api_base=base_url + "/v1", 
     openai_api_key=api_key, 
     model_name=model_name,
     temperature=temperature,
@@ -141,7 +158,7 @@ vector_store = OpenSearchVectorSearch(
 )
 
 retriever = vector_store.as_retriever()
-
+wikipedia = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
 
 # ========================================
 #                   Grader
@@ -198,11 +215,8 @@ class GraphState(TypedDict):
 
     question: str
     generation: str
-    transformed_question: str
+    web_search: str
     documents: list[str]
-    rewrite_question: str
-    rewrite_generation: str
-    rewrite_documents: list[str]
 
 
 # ========================================
@@ -227,23 +241,6 @@ def retrieve(state):
     return {"documents": documents, "question": question}
 
 
-def extra_retrieve(state):
-    """
-    Retrieve documents
-
-    Args:
-        state (dict): The current graph state
-
-    Returns:
-        state (dict): New key added to state, documents, that contains retrieved documents
-    """
-    question = state["rewrite_question"]
-
-    # Retrieval
-    documents = retriever.get_relevant_documents(question)
-    return {"rewrite_documents": documents, "rewrite_question": question}
-
-
 def generate(state):
     """
     Generate answer
@@ -264,28 +261,6 @@ def generate(state):
     }
 
 
-def extra_generate(state):
-    """
-    Generate answer
-
-    Args:
-        state (dict): The current graph state
-
-    Returns:
-        state (dict): New key added to state, generation, that contains LLM generation
-    """
-    question = state["rewrite_question"]
-    documents = state["rewrite_documents"]
-
-    # RAG generation
-    generation = rag_chain.invoke({"context": documents, "question": question})
-    return {
-        "rewrite_documents": documents, 
-        "rewrite_question": question, 
-        "rewrite_generation": generation
-    }
-
-
 def grade_documents(state):
     """
     Determines whether the retrieved documents are relevant to the question.
@@ -302,21 +277,24 @@ def grade_documents(state):
 
     # Score each doc
     filtered_docs = []
-    transformed_question = "Yes"
+    web_search = "Yes"
     for d in documents:
         score = retrieval_grader.invoke(
             {"question": question, "document": d.page_content}
         )
         grade = score.binary_score
         if grade == "yes":
-            transformed_question = "No"
+            web_search = "No"
             filtered_docs.append(d)
         else:
             continue
+
+    if not filtered_docs:
+        web_search = "Yes"
     return {
         "documents": filtered_docs, 
         "question": question, 
-        "transformed_question": transformed_question
+        "web_search": web_search
     }
 
 
@@ -336,7 +314,24 @@ def transform_query(state):
 
     # Re-write question
     better_question = question_rewriter.invoke({"question": question})
-    return {"documents": documents, "rewrite_question": better_question}
+    return {"documents": documents, "question": better_question}
+
+
+def search(state):
+    """
+    Retrieve additional documents from the web.
+
+    Args:
+        state (dict): The current graph state
+
+    Returns:
+        state (dict): Updates documents key with additional documents
+    """
+
+    question = state["question"]
+    documents = wikipedia.run(question)
+
+    return {"documents": documents, "question": question}
 
 
 # ========================================
@@ -353,9 +348,9 @@ def decide_to_generate(state):
         str: Binary decision for next node to call
     """
 
-    transformed_question = state["transformed_question"]
+    web_search = state["web_search"]
 
-    if transformed_question == "Yes":
+    if web_search == "Yes":
         # All documents have been filtered check_relevance
         # We will re-generate a new query
 
@@ -377,8 +372,7 @@ workflow.add_node("retrieve", retrieve)  # retrieve
 workflow.add_node("grade_documents", grade_documents)  # grade documents
 workflow.add_node("generate", generate)  # generatae
 workflow.add_node("transform_query", transform_query)  # transform_query
-workflow.add_node("extra_retrieve", extra_retrieve)
-workflow.add_node("extra_generate", extra_generate)
+workflow.add_node("wiki_search", search)
 
 # Buikd Graph
 workflow.add_edge(START, "retrieve")
@@ -391,13 +385,14 @@ workflow.add_conditional_edges(
         "generate": "generate",
     },
 )
-workflow.add_edge("transform_query", "extra_retrieve")
-workflow.add_edge("extra_retrieve", "extra_generate")
-workflow.add_edge("extra_generate", END)
+workflow.add_edge("transform_query", "wiki_search")
+workflow.add_edge("wiki_search", "generate")
+workflow.add_edge("generate", END)
 
 # Compile
 app = workflow.compile()
 
+st.session_state.plot = app.get_graph().draw_png()
 # ========================================
 #                   Streamlit
 # ========================================
@@ -416,10 +411,15 @@ if prompt := st.chat_input("What is up?"):
         try:
             response = [output for output in app.stream(inputs)]
             st.write(response[-1]["generate"]["generation"])
-            st.session_state.history.append({"role": "assistant", "message": response[-1]["generate"]["generation"]})
+            st.session_state.history.append({
+                "role": "assistant", 
+                "message": response[-1]["generate"]["generation"]
+            })
             st.session_state.log = response
         except BadRequestError:
-            st.error("Oops, it seems like the question is too complex or too long for me to answer. Please refresh the page abd try another question.")
+            st.error("Oops, it seems like the question is too complex or too "
+                     "long for me to answer. Please refresh the page abd try "
+                     "another question.")
             st.stop()
 
 if st.session_state.log:

@@ -32,12 +32,14 @@ services:
       - ./lab:/lab
     ports:
       - ${LAB_PORT}:${LAB_PORT}
+    depends_on:
+      - vllm-server
     restart: on-failure
     env_file:
       - docker-vars.env
     networks:
-      - llm
       - vllm-demo
+      - llm
 
 networks:
   llm:

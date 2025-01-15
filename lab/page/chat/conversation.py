@@ -15,7 +15,7 @@ logging.info(api_key)
 
 
 client = OpenAI(
-    base_url=base_url,
+    base_url=base_url + "/v1",
     api_key=api_key,
 )
 
