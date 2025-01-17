@@ -1,5 +1,5 @@
 import os
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 import streamlit as st
 from langchain_community.tools import WikipediaQueryRun
@@ -12,6 +12,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from openai import BadRequestError
 from utils.client.embedding import EmbeddingClient
+from langgraph.types import interrupt, Command
 
 
 # setup environment variable
@@ -317,6 +318,41 @@ def transform_query(state):
     return {"documents": documents, "question": better_question}
 
 
+def human_approve(state) -> Command[Literal["human_input", "wiki_search"]]:
+    """
+    Human approval for the transformed question.
+    """
+    is_approved = interrupt(
+        {
+            "task": "Is this rewrite acceptable?",
+            # Surface the output that should be
+            # reviewed and approved by the human.
+            "question": state["question"]
+        }
+    )
+
+    if is_approved:
+        return Command(goto="some_node")
+    else:
+        return Command(goto="another_node")
+
+
+def human_input(state):
+    """
+    Human input for the transformed question.
+    """
+    result = interrupt(
+        {
+            "task": "Make any necessary edits.",
+            "question": state["question"]
+        }
+    )
+
+    return {
+        "question": result["edited_text"]
+    }
+
+
 def search(state):
     """
     Retrieve additional documents from the web.
@@ -372,6 +408,8 @@ workflow.add_node("retrieve", retrieve)  # retrieve
 workflow.add_node("grade_documents", grade_documents)  # grade documents
 workflow.add_node("generate", generate)  # generatae
 workflow.add_node("transform_query", transform_query)  # transform_query
+workflow.add_node("human_approve", human_approve)
+workflow.add_node("human_input", human_input)
 workflow.add_node("wiki_search", search)
 
 # Buikd Graph
@@ -385,7 +423,8 @@ workflow.add_conditional_edges(
         "generate": "generate",
     },
 )
-workflow.add_edge("transform_query", "wiki_search")
+workflow.add_edge("transform_query", "human_approve")
+workflow.add_edge("human_input", "wiki_search")
 workflow.add_edge("wiki_search", "generate")
 workflow.add_edge("generate", END)
 
