@@ -54,8 +54,16 @@ class ChatCorrectiveRAGAgent(Agent):
         self._generate_prompt_template = ''
         self._grader_prompt_template = ''
         self._query_rewrite_prompt_template = ''
+
+        prompt_config = config.get("prompt", {})
+        if not isinstance(prompt_config, dict):
+            raise ValueError("Prompt config must be a dictionary.")
+        if not prompt_config:
+            raise ValueError("Prompt config must be specified.")
+        self._init_prompt_template(**prompt_config)
+        self._init_tools()
         self._init_state_graph()
-        self._init_tools(**config)
+        self.agent = None
 
     def _init_llm(self, llm_type, **kwargs):
         if not llm_type.startswith("chat_"):
@@ -101,70 +109,22 @@ class ChatCorrectiveRAGAgent(Agent):
     def query_rewrite_prompt_template(self, template):
         return ChatPromptTemplate.from_template(template)
     
-    def _init_tools(self, **kwargs):
+    def _init_tools(self):
         
-        self.embedding = kwargs.get('embedding', '')
-        self.vector_store = kwargs.get('vector_db', '')
-        self.llm = kwargs.get('llm', '')
-        self.generate_prompt_template = kwargs.get('generate_prompt', '')
-        self.grader_prompt_template = kwargs.get('grader_prompt', '')
-        self.query_rewrite_prompt_template = kwargs.get(
-            'query_rewrite_prompt', ''
-        )
-
-        if self.llm is None:
-            raise ValueError(
-                "LLM must be initialized before tools."
-            )
-        
-        if self.vector_store is None:
-            raise ValueError(
-                "Vector store must be initialized before tools."
-            )
-
         structured_llm_grader = self.llm.with_structured_output(
             self.GradeDocuments
         )
         
-        setattr(
-            self, 
-            'retriever', 
-            self.vector_store.as_retriever()
+        self.retriever = self.vector_store.as_retriever()
+        self.wiki_searcher = WikipediaQueryRun(
+            api_wrapper=WikipediaAPIWrapper()
         )
 
-        setattr(
-            self, 
-            'wiki_searcher', 
-            WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
-        )
-
-        retrieval_grader = self.grader_prompt_template | structured_llm_grader
-        
-        setattr(
-            self,
-            'retrieval_grader_chain',
-            retrieval_grader
-        )
-
-        generate = self.generate_prompt_template | self.llm | StrOutputParser()
-
-        setattr(
-            self,
-            'generate_chain',
-            generate
-        )
-
-        rewrite =\
+        self.grader_chain = self.grader_prompt_template | structured_llm_grader
+        self.generate_chain =\
+            self.generate_prompt_template | self.llm | StrOutputParser()
+        self.rewrite_chain =\
             self.query_rewrite_prompt_template | self.llm | StrOutputParser()
-        
-        setattr(
-            self,
-            'question_rewriter_chain',
-            rewrite
-        )
-
-    def init_workflow(self):
-        pass
 
     def retrieve(self, state):
         """
@@ -179,7 +139,7 @@ class ChatCorrectiveRAGAgent(Agent):
         question = state["question"]
 
         # Retrieval
-        documents = retriever.get_relevant_documents(question)
+        documents = self.retriever.get_relevant_documents(question)
         return {"documents": documents, "question": question}
 
     def generate(self, state):
@@ -196,9 +156,13 @@ class ChatCorrectiveRAGAgent(Agent):
         documents = state["documents"]
 
         # RAG generation
-        generation = rag_chain.invoke({"context": documents, "question": question})
+        generation = self.rag_chain.invoke({
+            "context": documents, "question": question
+        })
         return {
-            "documents": documents, "question": question, "generation": generation
+            "documents": documents, 
+            "question": question, 
+            "generation": generation
         }
 
     def grade_documents(self, state):
@@ -219,7 +183,7 @@ class ChatCorrectiveRAGAgent(Agent):
         filtered_docs = []
         web_search = "Yes"
         for d in documents:
-            score = self.retrieval_grader_chain.invoke(
+            score = self.grader_chain.invoke(
                 {"question": question, "document": d.page_content}
             )
             grade = score.binary_score
@@ -252,10 +216,12 @@ class ChatCorrectiveRAGAgent(Agent):
         documents = state["documents"]
 
         # Re-write question
-        better_question = question_rewriter.invoke({"question": question})
+        better_question = self.rewrite_chain.invoke({"question": question})
         return {"documents": documents, "question": better_question}
 
-    def human_approve(self, state) -> Command[Literal["human_input", "wiki_search"]]:
+    def human_approve(
+        self, state
+    ) -> Command[Literal["human_input", "wiki_search"]]:
         """
         Human approval for the transformed question.
         """
@@ -300,7 +266,7 @@ class ChatCorrectiveRAGAgent(Agent):
         """
 
         question = state["question"]
-        documents = wikipedia.run(question)
+        documents = self.wiki_searcher.run(question)
 
         return {"documents": documents, "question": question}
 
@@ -326,4 +292,37 @@ class ChatCorrectiveRAGAgent(Agent):
             # We have relevant documents, so generate answer
             return "generate"
 
-    
+    def init_workflow(self):
+
+        # Define the nodes
+        self.graph.add_node("retrieve", self.retrieve)
+        self.graph.add_node("grade_documents", self.grade_documents)
+        self.graph.add_node("generate", self.generate)
+        self.graph.add_node("transform_query", self.transform_query)
+        self.graph.add_node("human_approve", self.human_approve)
+        self.graph.add_node("human_input", self.human_input)
+        self.graph.add_node("wiki_search", self.search)
+
+        # Buikd Graph
+        self.graph.add_edge(START, "retrieve")
+        self.graph.add_edge("retrieve", "grade_documents")
+        self.graph.add_conditional_edges(
+            "grade_documents",
+            self.decide_to_generate,
+            {
+                "transform_query": "transform_query",
+                "generate": "generate",
+            },
+        )
+        self.graph.add_edge("transform_query", "human_approve")
+        self.graph.add_edge("human_input", "wiki_search")
+        self.graph.add_edge("wiki_search", "generate")
+        self.graph.add_edge("generate", END)
+
+        # Compile
+        setattr(self, "agent", self.graph.compile())
+
+    def get_graph(self):
+        if not self.agent:
+            raise ValueError("Agent not initialized.")
+        return self.agent.get_graph().draw_png()
