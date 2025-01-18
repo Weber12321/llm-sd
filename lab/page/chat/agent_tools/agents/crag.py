@@ -16,84 +16,66 @@ from langgraph.graph import END, START, StateGraph
 from openai import BadRequestError
 from utils.client.embedding import EmbeddingClient
 from langgraph.types import interrupt, Command
+from data.grader import GradeDocuments
+from data.state import RetrivalState
 
 
 class ChatCorrectiveRAGAgent(Agent):
-
-    class GradeDocuments(BaseModel):
-        """Binary score for relevance check on retrieved documents."""
-        binary_score: str = Field(
-            description="Documents are relevant to the question, 'yes' or 'no'"
-        )
-
-    class State(TypedDict):
-        """
-        Represents the state of our graph.
-
-        Attributes:
-            question: question
-            generation: LLM generation
-            web_search: whether to add search
-            documents: list of documents
-            rewrite_question: rephrased question
-            rewrite_generation: LLM generation
-            rewrite_documents: list of documents
-        """
-        question: str
-        generation: str
-        web_search: str
-        documents: list[str]
-
+    
     def __init__(self, config: Mapping[str, str]):
-        self._embedding = None
-        self._llm = None
-        self._vector_store = None
+        embedding_config = config.get("embedding", {})
+        if not isinstance(embedding_config, dict):
+            raise ValueError("Embedding config must be a dictionary.")
+        if "embedding_api_path" not in embedding_config:
+            raise ValueError(
+                "Embedding config must include 'embedding_api_path'.")
+        self.embedding = EmbeddingClient(**embedding_config)
+
+        vector_db_type = self.VEVTOR_DB_TYPE.get(
+            config.get("vector_db", ""), ""
+        )
+        if not vector_db_type:
+            raise ValueError("Vector DB type must be specified.")
+        vector_db_config = config.get("vector_db_config", {})
+        if not isinstance(vector_db_config, dict):
+            raise ValueError("Vector DB config must be a dictionary.")        
+        self.vector_store = self.VECTOR_DB_TYPE(**vector_db_config)
+
+        llm_type = config.get("llm", "")
+        if not llm_type:
+            raise ValueError("LLM type must be specified.")
+        llm_config = config.get("llm_config", {})
+        if not isinstance(llm_config, dict):
+            raise ValueError("LLM config must be a dictionary.")
+        
+        self.llm = self._init_llm(llm_type, **llm_config)
+        self.graph = self._init_state_graph(RetrivalState)
+
         self._generate_prompt_template = ''
         self._grader_prompt_template = ''
         self._query_rewrite_prompt_template = ''
         self._init_state_graph()
         self._init_tools(**config)
 
-    @property
-    def embedding(self):
-        return self._embedding
-    
-    @embedding.setter
-    def embedding(self, **kwargs):
-        return EmbeddingClient(**kwargs)
-
-    @property
-    def vector_store(self):
-        return self._vector_store
-    
-    @vector_store.setter
-    def vector_store(self, vector_db_type, **kwargs):
-        try:
-            self._vector_store = self.VECTOR_DB_TYPE[
-                vector_db_type](**kwargs)
-        except KeyError as exc:
-            raise ValueError(
-                f"Vector DB type {vector_db_type} not found "
-                f"in {self.VECTOR_DB_TYPE.keys()}."
-            ) from exc
-
-    @property
-    def llm(self):
-        return self._llm
-    
-    @llm.setter
-    def llm(self, llm_type, **kwargs):
+    def _init_llm(self, llm_type, **kwargs):
         if not llm_type.startswith("chat_"):
             raise ValueError(
                 "llm_type must start with 'chat_'"
             )
         try:
-            self._llm = self.LLM_TYPE[llm_type](**kwargs)
+            return self.LLM_TYPE[llm_type](**kwargs)
         except KeyError as exc:
             raise ValueError(
                 f"LLM type {llm_type} not found "
                 f"in {self.LLM_TYPE.keys()}."
             ) from exc
+
+    def _init_prompt_template(self, **kwargs):
+        self.generate_prompt_template = kwargs.get('generate_prompt', '')
+        self.grader_prompt_template = kwargs.get('grader_prompt', '')
+        self.query_rewrite_prompt_template = kwargs.get(
+            'query_rewrite_prompt', ''
+        )
 
     @property
     def generate_prompt_template(self):
@@ -118,14 +100,6 @@ class ChatCorrectiveRAGAgent(Agent):
     @query_rewrite_prompt_template.setter
     def query_rewrite_prompt_template(self, template):
         return ChatPromptTemplate.from_template(template)
-
-    def _init_state_graph(self):
-        # Initialize the state graph
-        setattr(
-            self, 
-            'state', 
-            StateGraph(self.State)
-        )
     
     def _init_tools(self, **kwargs):
         
